@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../constants.dart';
+import '../../services/database_service.dart'; // Importamos el servicio
 
-class AppointmentsScreen extends StatelessWidget {
-  // Recibimos la lista de citas desde el Home
-  final List<Map<String, String>> appointments;
+class AppointmentsScreen extends StatefulWidget {
+  // Ya no necesitamos recibir la lista por parámetro, la leeremos aquí mismo
+  const AppointmentsScreen({
+    super.key,
+    List<Map<String, dynamic>>? appointments,
+  });
 
-  const AppointmentsScreen({super.key, required this.appointments});
+  @override
+  State<AppointmentsScreen> createState() => _AppointmentsScreenState();
+}
+
+class _AppointmentsScreenState extends State<AppointmentsScreen> {
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   Widget build(BuildContext context) {
@@ -14,8 +24,7 @@ class AppointmentsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        automaticallyImplyLeading:
-            false, // Se quita la flecha de atrás porque es una pestaña principal
+        automaticallyImplyLeading: false,
         title: const Padding(
           padding: EdgeInsets.only(left: 8.0),
           child: Text(
@@ -31,23 +40,71 @@ class AppointmentsScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // Aquí se podrá agregar las pestañas "Próximas" y "Pasadas" en el futuro
             const SizedBox(height: 10),
-
             Expanded(
-              child: appointments.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24.0,
-                        vertical: 10.0,
-                      ),
-                      itemCount: appointments.length,
-                      itemBuilder: (context, index) {
-                        final app = appointments[index];
-                        return _buildAppointmentCard(app);
-                      },
+              // Usamos StreamBuilder para escuchar cambios en tiempo real
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _firestoreService.getUserAppointments(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Center(child: Text('Error al cargar citas'));
+                  }
+
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return _buildEmptyState();
+                  }
+
+                  // Convertimos y ordenamos las citas
+                  final docs = snapshot.data!.docs;
+                  final List<Map<String, dynamic>> appointments = docs.map((
+                    doc,
+                  ) {
+                    final data = doc.data() as Map<String, dynamic>;
+
+                    // Formatear nombre del doctor
+                    String nombreOdonto = (data['nombreOdonto'] ?? 'Odontólogo')
+                        .toString();
+                    String apellidoOdonto = (data['apellidoOdonto'] ?? '')
+                        .toString();
+                    String doctorDisplay =
+                        'Odont. $nombreOdonto $apellidoOdonto'.trim();
+
+                    return {
+                      'treatment': (data['nombreServicio'] ?? 'Tratamiento')
+                          .toString(),
+                      'doctor': doctorDisplay,
+                      'date': (data['fecha'] ?? 'Fecha pendiente').toString(),
+                      'fechaISO': (data['fechaISO'] ?? '').toString(),
+                    };
+                  }).toList();
+
+                  // Ordenar: Las más recientes primero (o al revés si prefieres)
+                  // Aquí ordenamos por fechaISO descendente (nuevas arriba) o ascendente según prefieras
+                  appointments.sort((a, b) {
+                    String dateA = a['fechaISO'] ?? '';
+                    String dateB = b['fechaISO'] ?? '';
+                    return dateA.compareTo(
+                      dateB,
+                    ); // Ascendente: Pasadas -> Futuras
+                  });
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0,
+                      vertical: 10.0,
                     ),
+                    itemCount: appointments.length,
+                    itemBuilder: (context, index) {
+                      final app = appointments[index];
+                      return _buildAppointmentCard(app);
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -55,7 +112,6 @@ class AppointmentsScreen extends StatelessWidget {
     );
   }
 
-  // Diseño cuando no hay citas
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -63,7 +119,6 @@ class AppointmentsScreen extends StatelessWidget {
         children: [
           Icon(
             Icons.calendar_today_outlined,
-            // ignore: deprecated_member_use
             size: 80,
             // ignore: deprecated_member_use
             color: kBorderGrayColor.withOpacity(0.5),
@@ -82,8 +137,7 @@ class AppointmentsScreen extends StatelessWidget {
     );
   }
 
-  // Tarjeta de cada cita individual
-  Widget _buildAppointmentCard(Map<String, String> appointment) {
+  Widget _buildAppointmentCard(Map<String, dynamic> appointment) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16.0),
       padding: const EdgeInsets.all(16.0),
@@ -105,9 +159,8 @@ class AppointmentsScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Título del tratamiento
           Text(
-            appointment['treatment']!,
+            appointment['treatment'] ?? '',
             style: const TextStyle(
               color: kLogoGrayColor,
               fontSize: 18,
@@ -115,22 +168,20 @@ class AppointmentsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          // Nombre del doctor
           Text(
-            appointment['doctor']!,
+            appointment['doctor'] ?? '',
             style: const TextStyle(color: kTextGrayColor, fontSize: 14),
           ),
           const SizedBox(height: 12),
           const Divider(height: 1, color: kBorderGrayColor),
           const SizedBox(height: 12),
-          // Fecha y Hora
           Row(
             children: [
               const Icon(Icons.calendar_month, size: 18, color: kPrimaryColor),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  appointment['date']!,
+                  appointment['date'] ?? '',
                   style: const TextStyle(
                     color: kLogoGrayColor,
                     fontSize: 14,
@@ -141,7 +192,6 @@ class AppointmentsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Botones de acción (Simulados)
           Row(
             children: [
               Expanded(

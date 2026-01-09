@@ -1,75 +1,68 @@
 import 'package:flutter/material.dart';
 import 'presentacion/pantallas/login_screen.dart';
 import 'presentacion/pantallas/register_type.dart';
+import 'presentacion/pantallas/home_screen.dart'; // Importante para la redirección
 import 'constants.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Para verificar estado
 
-void main() {
-  runApp(
-    const MyApp(),
-  ); // Función principal que ejecuta la aplicación llamando al widget MyApp.
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({
-    super.key,
-  }); // Constructor constante para optimizar el rendimiento.
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // build() define cómo se construye la interfaz visual del widget.
     return MaterialApp(
-      debugShowCheckedModeBanner:
-          false, // Quita la etiqueta de "debug" en la esquina.
-      title: 'Dental Lanch', // Título de la app.
+      debugShowCheckedModeBanner: false,
+      title: 'Dental Lanch',
       theme: ThemeData(primarySwatch: Colors.pink),
-      home:
-          const WelcomeScreen(), // Pantalla principal que se mostrará al iniciar la app.
+      // Usamos un StreamBuilder para escuchar el estado de autenticación
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasData) {
+            // Si hay usuario, vamos al Home
+            return const HomeScreen();
+          }
+          // Si no, vamos a la pantalla de bienvenida
+          return const WelcomeScreen();
+        },
+      ),
     );
   }
 }
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({super.key}); // Constructor del widget de la pantalla.
+  const WelcomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    //Obtenemos el tamaño de la pantalla
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        // SafeArea evita que el contenido se superponga con la barra de estado o notch.
-        // SingleChildScrollView para evitar overflow en pantallas pequeñas
         child: SingleChildScrollView(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            // Aseguramos la altura mínima para centrar verticalmente
             constraints: BoxConstraints(
-              minHeight:
-                  size.height -
-                  MediaQuery.of(
-                    context,
-                  ).padding.top, // Restamos el padding superior
+              minHeight: size.height - MediaQuery.of(context).padding.top,
             ),
             child: Column(
-              // Organiza los elementos en una columna (de arriba hacia abajo).
-              mainAxisAlignment:
-                  MainAxisAlignment.center, // Centra verticalmente los widgets.
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // === LOGO ===
-                Image.asset(
-                  'assets/logo.png', // Ruta del logo.
-                  height: 160,
-                ),
-
-                const SizedBox(
-                  height: 20,
-                ), // Espacio vertical entre logo y texto.
-
+                Image.asset('assets/logo.png', height: 160),
+                const SizedBox(height: 20),
                 const SizedBox(height: 10),
-
-                // === LEMA ===
                 const Text(
                   'Tu sonrisa, nuestra pasión',
                   style: TextStyle(
@@ -78,25 +71,20 @@ class WelcomeScreen extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-
                 const SizedBox(height: 10),
-
-                // === TEXTO PEQUEÑO DE OPCIÓN ===
                 const Text(
                   'Puedes Iniciar Sesión\no\nCrear una cuenta con tu correo electrónico',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: kTextGrayColor, fontSize: 15),
                 ),
-
                 const SizedBox(height: 40),
 
-                // === BOTÓN "INICIAR SESIÓN" ===
+                // === BOTÓN INICIAR SESIÓN ===
                 SizedBox(
-                  width: double.infinity, // Ancho adaptable
+                  width: double.infinity,
                   height: 45,
                   child: ElevatedButton(
                     onPressed: () {
-                      // <<< navega a la pantalla de Login
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -107,9 +95,7 @@ class WelcomeScreen extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kPrimaryColor,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          8,
-                        ), // Bordes redondeados.
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: const Text(
@@ -122,16 +108,14 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 15),
 
-                // === BOTÓN "CREAR CUENTA" ===
+                // === BOTÓN CREAR CUENTA ===
                 SizedBox(
-                  width: double.infinity, // Ancho adaptable
+                  width: double.infinity,
                   height: 45,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Navegamos a la nueva pantalla
                       Navigator.push(
                         context,
                         MaterialPageRoute(

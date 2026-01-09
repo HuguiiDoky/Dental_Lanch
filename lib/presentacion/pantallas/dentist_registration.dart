@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Importante para manejar errores específicos
 import '../../constants.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import '../../services/auth_service.dart';
+import '../../services/database_service.dart';
 
 class RegisterDentistScreen extends StatefulWidget {
   const RegisterDentistScreen({super.key});
@@ -11,10 +14,113 @@ class RegisterDentistScreen extends StatefulWidget {
 }
 
 class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
-  // Estado para el toggle de la contraseña
+  // Controladores
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _surnameController = TextEditingController();
+  final TextEditingController _cedulaController = TextEditingController();
+  final TextEditingController _specialtyController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
+
   bool _isPasswordVisible = false;
-  // Estado para el dropdown de género
+  bool _isConfirmPasswordVisible = false;
   String? _selectedGender;
+  bool _isLoading = false;
+
+  void _register() async {
+    // 1. Validaciones iniciales
+    if (_nameController.text.isEmpty ||
+        _surnameController.text.isEmpty ||
+        _cedulaController.text.isEmpty ||
+        _specialtyController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, llena todos los campos')),
+      );
+      return;
+    }
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Las contraseñas no coinciden')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // 2. Intentar crear usuario en Firebase Auth
+      final userCredential = await _authService.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (userCredential.user != null) {
+        // 3. Guardar datos adicionales en Firestore
+        await _firestoreService.saveUser(userCredential.user!.uid, {
+          'nombres': _nameController.text.trim(),
+          'apellidos': _surnameController.text.trim(),
+          'cedula': _cedulaController.text.trim(),
+          'especialidad': _specialtyController.text.trim(),
+          'email': _emailController.text.trim(),
+          'genero': _selectedGender,
+          'rol': 'odontologo',
+          'uid': userCredential.user!.uid,
+          'fechaRegistro': DateTime.now().toIso8601String(),
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('¡Cuenta de odontólogo creada exitosamente!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            (route) => false,
+          );
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      // --- MANEJO DE ERRORES AMIGABLE ---
+      String errorMessage = 'Ocurrió un error al registrarse';
+
+      if (e.code == 'email-already-in-use') {
+        errorMessage = 'Este correo electrónico ya está registrado.';
+      } else if (e.code == 'weak-password') {
+        errorMessage = 'La contraseña es muy débil (mínimo 6 caracteres).';
+      } else if (e.code == 'invalid-email') {
+        errorMessage = 'El correo electrónico no es válido.';
+      } else if (e.code == 'network-request-failed') {
+        errorMessage = 'Error de conexión. Verifica tu internet.';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      // Error genérico
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +151,6 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
               horizontal: 32.0,
               vertical: 24.0,
             ),
-            // Aseguramos una altura mínima para que el 'padding' se vea bien
             constraints: BoxConstraints(
               minHeight:
                   size.height -
@@ -55,68 +160,39 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- Campo Nombre completo ---
                 _buildTextField(
-                  label: 'Nombre completo',
-                  hintText: 'Ej: Odont. Laura Velasco',
+                  label: 'Nombres',
+                  hintText: 'Ej: Laura María',
+                  controller: _nameController,
                 ),
                 const SizedBox(height: 20),
-
-                // --- Campo Cédula Profesional ---
+                _buildTextField(
+                  label: 'Apellidos',
+                  hintText: 'Ej: Velasco Ruiz',
+                  controller: _surnameController,
+                ),
+                const SizedBox(height: 20),
                 _buildTextField(
                   label: 'Cédula Profesional',
                   hintText: 'Ej: 12345678',
                   keyboardType: TextInputType.number,
+                  controller: _cedulaController,
                 ),
                 const SizedBox(height: 20),
-
-                // --- Campo Especialidad ---
                 _buildTextField(
                   label: 'Especialidad',
                   hintText: 'Ej: Endodoncia',
+                  controller: _specialtyController,
                 ),
                 const SizedBox(height: 20),
-
-                // --- Campo Correo electrónico ---
                 _buildTextField(
                   label: 'Correo electrónico',
                   hintText: 'laura.velasco@ejemplo.com',
                   keyboardType: TextInputType.emailAddress,
+                  controller: _emailController,
                 ),
                 const SizedBox(height: 20),
 
-                // --- Campo Contraseña ---
-                const Text(
-                  'Contraseña',
-                  style: TextStyle(
-                    color: kLogoGrayColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  obscureText: !_isPasswordVisible,
-                  decoration: _buildInputDecoration(
-                    hintText: 'Mínimo 8 caracteres',
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isPasswordVisible
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                        color: kTextGrayColor,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // --- Campo Género (Dropdown) ---
                 const Text(
                   'Género',
                   style: TextStyle(
@@ -129,7 +205,7 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: _selectedGender,
                   hint: const Text(
-                    'Selecciona tu género', // Hint corregido
+                    'Selecciona tu género',
                     style: TextStyle(color: kBorderGrayColor),
                   ),
                   decoration: _buildInputDecoration(hintText: ''),
@@ -139,29 +215,70 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
                             DropdownMenuItem(value: label, child: Text(label)),
                       )
                       .toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedGender = value;
-                    });
-                  },
+                  onChanged: (value) => setState(() => _selectedGender = value),
+                ),
+                const SizedBox(height: 20),
+
+                const Text(
+                  'Contraseña',
+                  style: TextStyle(
+                    color: kLogoGrayColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: !_isPasswordVisible,
+                  decoration: _buildInputDecoration(
+                    hintText: 'Mínimo 8 caracteres',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                      ),
+                      onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Confirmar Contraseña',
+                  style: TextStyle(
+                    color: kLogoGrayColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: !_isConfirmPasswordVisible,
+                  decoration: _buildInputDecoration(
+                    hintText: 'Repite tu contraseña',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isConfirmPasswordVisible
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                      ),
+                      onPressed: () => setState(
+                        () => _isConfirmPasswordVisible =
+                            !_isConfirmPasswordVisible,
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 40),
 
-                // --- Botón Crear Cuenta ---
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      // Implementar lógica de creación de cuenta
-                      // Al éxito, navegar al Home y limpiar la pila
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const HomeScreen(),
-                        ),
-                        (route) => false,
-                      );
-                    },
+                    onPressed: _isLoading ? null : _register,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kPrimaryColor,
                       padding: const EdgeInsets.symmetric(vertical: 18),
@@ -169,19 +286,26 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      'Crear Cuenta',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Crear Cuenta',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 30),
 
-                // --- Enlace "Ya tienes una cuenta" ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -190,15 +314,12 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
                       style: TextStyle(color: kTextGrayColor, fontSize: 14),
                     ),
                     TextButton(
-                      onPressed: () {
-                        // Navegar a la pantalla de Login
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoginScreen(),
-                          ),
-                        );
-                      },
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
+                      ),
                       style: TextButton.styleFrom(
                         padding: EdgeInsets.zero,
                         minimumSize: Size.zero,
@@ -215,7 +336,7 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20), // Espacio al final
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -224,10 +345,10 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
     );
   }
 
-  // Helper para campos de texto (sin el widget de estado de contraseña)
   Widget _buildTextField({
     required String label,
     required String hintText,
+    required TextEditingController controller,
     TextInputType keyboardType = TextInputType.text,
   }) {
     return Column(
@@ -243,6 +364,7 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
         ),
         const SizedBox(height: 8),
         TextFormField(
+          controller: controller,
           keyboardType: keyboardType,
           decoration: _buildInputDecoration(hintText: hintText),
         ),
@@ -250,7 +372,6 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
     );
   }
 
-  // Helper para la decoración (idéntico al de login_screen.dart)
   InputDecoration _buildInputDecoration({
     required String hintText,
     Widget? suffixIcon,
@@ -265,11 +386,11 @@ class _RegisterDentistScreenState extends State<RegisterDentistScreen> {
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: kBorderGrayColor, width: 1.0),
+        borderSide: const BorderSide(color: kBorderGrayColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: kBorderGrayColor, width: 1.0),
+        borderSide: const BorderSide(color: kBorderGrayColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../constants.dart';
 import 'home_screen.dart';
+import '../../services/auth_service.dart'; // Importa tu servicio
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,53 +11,85 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
+
   bool _isPasswordVisible = false;
+  bool _isLoading = false; // Estado de carga
+
+  void _login() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor llena todos los campos')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await _authService.signIn(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      // Si el login es exitoso, navegamos
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al iniciar sesión: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Usamos MediaQuery para obtener el tamaño de la pantalla
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
       backgroundColor: Colors.white,
-      // Añadimos un AppBar para tener la flecha de "atrás" automáticamente
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0, // Sin sombra
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: kLogoGrayColor),
-          onPressed: () =>
-              Navigator.of(context).pop(), // Regresa a la pantalla anterior
+          onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          // Permite hacer scroll si el contenido no cabe
           child: Container(
-            // Añadimos padding horizontal
             padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            // Ajustamos la altura mínima
             constraints: BoxConstraints(
               minHeight:
                   size.height -
                   MediaQuery.of(context).padding.top -
-                  kToolbarHeight, // Restamos el appbar
+                  kToolbarHeight,
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // --- INICIO: Logo ---
                 Column(
                   children: [
                     Image.asset('assets/logo.png', height: 160),
                     const SizedBox(height: 20),
                   ],
                 ),
-
-                // --- FIN: Logo ---
                 const SizedBox(height: 10),
-
-                // Título
                 const Text(
                   'Inicia Sesión con tu cuenta',
                   style: TextStyle(
@@ -66,31 +99,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   textAlign: TextAlign.center,
                 ),
-
                 const SizedBox(height: 16),
-
-                // Subtítulo
                 const Text(
                   'Ingresa tu correo electrónico para iniciar sesión en Dental Lanch',
                   style: TextStyle(color: kTextGrayColor, fontSize: 15),
                   textAlign: TextAlign.center,
                 ),
-
                 const SizedBox(height: 40),
 
-                // Campo de Correo Electrónico
+                // Campo Email
                 TextFormField(
+                  controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: _buildInputDecoration(
                     hintText: 'correoelectrónico@dominio.com',
                   ),
                 ),
-
                 const SizedBox(height: 20),
 
-                // Campo de Contraseña
+                // Campo Password
                 TextFormField(
-                  obscureText: !_isPasswordVisible, // Ocultar contraseña
+                  controller: _passwordController,
+                  obscureText: !_isPasswordVisible,
                   decoration: _buildInputDecoration(
                     hintText: 'Contraseña',
                     suffixIcon: IconButton(
@@ -101,7 +131,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: kTextGrayColor,
                       ),
                       onPressed: () {
-                        // Cambiar el estado para mostrar/ocultar contraseña
                         setState(() {
                           _isPasswordVisible = !_isPasswordVisible;
                         });
@@ -109,46 +138,42 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 40),
 
-                // Botón de Iniciar Sesión
+                // Botón Iniciar Sesión con Loading
                 SizedBox(
-                  width: double.infinity, // El botón ocupa todo el ancho
+                  width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      // Implementar lógica de inicio de sesión
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const HomeScreen(),
-                        ),
-                        (route) =>
-                            false, // Esto elimina todas las pantallas (Welcome, Login)
-                      );
-                    },
+                    onPressed: _isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kPrimaryColor,
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      elevation: 0, // Sin sombra
+                      elevation: 0,
                     ),
-                    child: const Text(
-                      'Iniciar Sesión',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Iniciar Sesión',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
-
                 const SizedBox(height: 30),
 
-                // Enlace de "Olvidaste tu contraseña"
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -157,12 +182,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(color: kTextGrayColor, fontSize: 14),
                     ),
                     TextButton(
-                      onPressed: () {
-                        // Implementar lógica de olvido de contraseña
-                      },
+                      onPressed: () {}, // Implementar reset password luego
                       style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero, // Quitar padding
-                        minimumSize: Size.zero, // Quitar tamaño mínimo
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       child: const Text(
@@ -185,7 +208,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Helper para construir la decoración de los campos de texto
   InputDecoration _buildInputDecoration({
     required String hintText,
     Widget? suffixIcon,

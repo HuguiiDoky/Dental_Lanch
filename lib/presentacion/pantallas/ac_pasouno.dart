@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../constants.dart';
 import 'ac_pasodos.dart';
 
@@ -11,25 +12,8 @@ class ScheduleAppointmentScreen extends StatefulWidget {
 }
 
 class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
-  // Variable para guardar el índice del servicio seleccionado
-  int? _selectedServiceIndex;
-
-  // Lista de servicios
-  final List<Map<String, String>> _services = [
-    {
-      'title': 'Limpieza Dental',
-      'subtitle': '60 min - Prevención y mantenimiento',
-    },
-    {'title': 'Blanqueamiento Dental', 'subtitle': '90 min - Estética dental'},
-    {
-      'title': 'Consulta General',
-      'subtitle': '30 min - Diagnóstico y plan de tratamiento',
-    },
-    {
-      'title': 'Ajuste Mensual',
-      'subtitle': '45 min - Cambio de ligas y tratamiento de ortodoncia',
-    },
-  ];
+  String? _selectedServiceId;
+  Map<String, String>? _selectedServiceData;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +38,6 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Contenido con scroll
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
@@ -79,24 +62,74 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Lista de tarjetas de servicio
-                    ...List.generate(_services.length, (index) {
-                      final service = _services[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: _buildServiceCard(
-                          title: service['title']!,
-                          subtitle: service['subtitle']!,
-                          index: index,
-                        ),
-                      );
-                    }),
+                    // Leemos de la colección 'servicios'
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('servicios')
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return const Center(child: Text('Error al cargar'));
+                        }
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return const Center(
+                            child: Text('No hay servicios disponibles'),
+                          );
+                        }
+
+                        final services = snapshot.data!.docs;
+
+                        return Column(
+                          children: services.map((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final String id = doc.id;
+
+                            // Extraemos datos asegurando que sean String
+                            final String title =
+                                (data['nombreServicio'] ?? 'Servicio')
+                                    .toString();
+                            final String descripcion =
+                                (data['descripcion'] ?? '').toString();
+
+                            // Manejo seguro de la duración
+                            String duracionStr = '30 min';
+                            if (data['duracion'] != null) {
+                              String d = data['duracion'].toString();
+                              duracionStr = d.toLowerCase().contains('min')
+                                  ? d
+                                  : '$d min';
+                            }
+
+                            final String subtitle =
+                                '$duracionStr - $descripcion';
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16.0),
+                              child: _buildServiceCard(
+                                title: title,
+                                subtitle: subtitle,
+                                id: id,
+                                fullData: {
+                                  'id': id,
+                                  'title': title,
+                                  'subtitle': subtitle,
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
             ),
-
-            // Botón Siguiente
             Container(
               padding: const EdgeInsets.all(24.0),
               decoration: BoxDecoration(
@@ -113,21 +146,15 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  // Solo se activa si hay un servicio seleccionado
-                  onPressed: _selectedServiceIndex == null
+                  onPressed: _selectedServiceId == null
                       ? null
                       : () {
-                          // Capturamos el servicio seleccionado
-                          final selectedService =
-                              _services[_selectedServiceIndex!];
-
-                          // Pasamos el dato al Paso 2
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) =>
                                   ScheduleAppointmentStep2Screen(
-                                    serviceData: selectedService,
+                                    serviceData: _selectedServiceData!,
                                   ),
                             ),
                           );
@@ -161,15 +188,17 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
   Widget _buildServiceCard({
     required String title,
     required String subtitle,
-    required int index,
+    required String id,
+    required Map<String, String> fullData,
   }) {
-    final bool isSelected = _selectedServiceIndex == index;
+    final bool isSelected = _selectedServiceId == id;
     final Color borderColor = isSelected ? kPrimaryColor : kBorderGrayColor;
 
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedServiceIndex = index;
+          _selectedServiceId = id;
+          _selectedServiceData = fullData;
         });
       },
       child: Container(

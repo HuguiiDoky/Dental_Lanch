@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../constants.dart';
 import 'ac_pasotres.dart';
 
 class ScheduleAppointmentStep2Screen extends StatefulWidget {
-  // Variable para recibir los datos del Paso 1
   final Map<String, String> serviceData;
 
   const ScheduleAppointmentStep2Screen({super.key, required this.serviceData});
@@ -15,32 +15,8 @@ class ScheduleAppointmentStep2Screen extends StatefulWidget {
 
 class _ScheduleAppointmentStep2ScreenState
     extends State<ScheduleAppointmentStep2Screen> {
-  // Índice del odontólogo seleccionado
-  int? _selectedDentistIndex;
-
-  // Lista de odontólogos simulada (por el momento a falta de base de datos)
-  final List<Map<String, String>> _dentists = [
-    {
-      'name': 'Odont. Fernanda Lampart',
-      'specialty': 'Especialista en Odontopediatría',
-      'initials': 'FL',
-    },
-    {
-      'name': 'Odont. Angel Rendon',
-      'specialty': 'Especialista en Estética Dental',
-      'initials': 'AR',
-    },
-    {
-      'name': 'Odont. Ingrid Hernandez',
-      'specialty': 'Especialista en Odontopediatría',
-      'initials': 'IH',
-    },
-    {
-      'name': 'Odont. Giovanni Soto',
-      'specialty': 'Especialista en Periodoncia',
-      'initials': 'GS',
-    },
-  ];
+  String? _selectedDentistId;
+  Map<String, String>? _selectedDentistData;
 
   @override
   Widget build(BuildContext context) {
@@ -100,25 +76,87 @@ class _ScheduleAppointmentStep2ScreenState
                     ),
                     const SizedBox(height: 24),
 
-                    // Lista de Odontólogos
-                    ...List.generate(_dentists.length, (index) {
-                      final dentist = _dentists[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: _buildDentistCard(
-                          name: dentist['name']!,
-                          specialty: dentist['specialty']!,
-                          initials: dentist['initials']!,
-                          index: index,
-                        ),
-                      );
-                    }),
+                    // Consultamos usuarios con rol odontologo
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('usuarios')
+                          .where('rol', isEqualTo: 'odontologo')
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return const Center(child: Text('Error al cargar'));
+                        }
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return const Center(
+                            child: Text('No hay odontólogos registrados'),
+                          );
+                        }
+
+                        final dentists = snapshot.data!.docs;
+
+                        return Column(
+                          children: dentists.map((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final String id = doc.id;
+
+                            // 1. OBTENER DATOS PUROS DE LA BD
+                            final String nombres =
+                                (data['nombres'] ??
+                                        data['name'] ??
+                                        'Odontólogo')
+                                    .toString();
+                            final String apellidos =
+                                (data['apellidos'] ?? data['surname'] ?? '')
+                                    .toString();
+                            final String especialidad =
+                                (data['especialidad'] ?? 'General').toString();
+
+                            // 2. FORMATEAR PARA LA VISTA (APP)
+                            final String displayName =
+                                'Odont. $nombres $apellidos'.trim();
+
+                            // Iniciales
+                            String initials = 'Dr';
+                            if (nombres.isNotEmpty) {
+                              initials = nombres[0];
+                              if (apellidos.isNotEmpty) {
+                                initials += apellidos[0];
+                              }
+                            }
+                            initials = initials.toUpperCase();
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16.0),
+                              child: _buildDentistCard(
+                                name: displayName, // Se muestra con "Odont."
+                                specialty: especialidad,
+                                initials: initials,
+                                id: id,
+                                fullData: {
+                                  'id': id,
+                                  'name':
+                                      displayName, // Para mostrar en confirmación
+                                  // 3. GUARDAMOS LOS DATOS LIMPIOS PARA USARLOS EN EL PASO 3
+                                  'rawName': nombres,
+                                  'rawSurname': apellidos,
+                                  'specialty': especialidad,
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
             ),
-
-            // Botón Siguiente
             Container(
               padding: const EdgeInsets.all(24.0),
               decoration: BoxDecoration(
@@ -135,23 +173,16 @@ class _ScheduleAppointmentStep2ScreenState
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _selectedDentistIndex == null
+                  onPressed: _selectedDentistId == null
                       ? null
                       : () {
-                          // Capturamos el odontólogo seleccionado
-                          final selectedDentist =
-                              _dentists[_selectedDentistIndex!];
-
-                          // Pasamos al Paso 3 enviando AMBOS datos
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) =>
                                   ScheduleAppointmentStep3Screen(
-                                    serviceData:
-                                        widget.serviceData, // Dato del Paso 1
-                                    dentistData:
-                                        selectedDentist, // Dato del Paso 2
+                                    serviceData: widget.serviceData,
+                                    dentistData: _selectedDentistData!,
                                   ),
                             ),
                           );
@@ -186,9 +217,10 @@ class _ScheduleAppointmentStep2ScreenState
     required String name,
     required String specialty,
     required String initials,
-    required int index,
+    required String id,
+    required Map<String, String> fullData,
   }) {
-    final bool isSelected = _selectedDentistIndex == index;
+    final bool isSelected = _selectedDentistId == id;
     final Color borderColor = isSelected ? kPrimaryColor : kBorderGrayColor;
     final Color avatarColor =
         // ignore: deprecated_member_use
@@ -197,7 +229,8 @@ class _ScheduleAppointmentStep2ScreenState
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedDentistIndex = index;
+          _selectedDentistId = id;
+          _selectedDentistData = fullData;
         });
       },
       child: Container(

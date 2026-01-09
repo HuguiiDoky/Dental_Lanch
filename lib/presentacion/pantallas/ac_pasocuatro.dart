@@ -18,7 +18,7 @@ class AppointmentConfirmationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Formatear la fecha manualmenmte
+    // Formatear la fecha manualmente
     final List<String> days = [
       'Lunes',
       'Martes',
@@ -64,8 +64,8 @@ class AppointmentConfirmationScreen extends StatelessWidget {
               Container(
                 width: 100,
                 height: 100,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE0F7FA),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE0F7FA),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -97,7 +97,7 @@ class AppointmentConfirmationScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Descripción con el nombre del doctor en negrita
+              // Descripción
               RichText(
                 textAlign: TextAlign.center,
                 text: TextSpan(
@@ -137,20 +137,13 @@ class AppointmentConfirmationScreen extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // Creamos el objeto de la cita para ponerlo en la pantalla principal
-                    final newAppointment = {
-                      'treatment': serviceData['title']!,
-                      'doctor': dentistData['name']!,
-                      'date': formattedDate,
-                    };
-
-                    // Navegamos en la panatalla principal (pestaña Citas = 1) y pasamos los datos
+                    // --- CORRECCIÓN: Ya no pasamos newAppointment ---
+                    // Simplemente navegamos al tab 1 (Citas), Firebase ya tendrá los datos.
                     Navigator.pushAndRemoveUntil(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => HomeScreen(
+                        builder: (context) => const HomeScreen(
                           initialIndex: 1, // Ir a pestaña Citas
-                          newAppointment: newAppointment, // PASAR DATOS
                         ),
                       ),
                       (route) => false,
@@ -178,20 +171,12 @@ class AppointmentConfirmationScreen extends StatelessWidget {
               // Botón "Volver al inicio"
               TextButton(
                 onPressed: () {
-                  // Mismo objeto de cita
-                  final newAppointment = {
-                    'treatment': serviceData['title']!,
-                    'doctor': dentistData['name']!,
-                    'date': formattedDate,
-                  };
-
-                  // Navegamos en la pantalla principal (pestaña Home = 0) y pasamos los datos
+                  // --- CORRECCIÓN: Ya no pasamos newAppointment ---
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => HomeScreen(
+                      builder: (context) => const HomeScreen(
                         initialIndex: 0, // Ir al Dashboard
-                        newAppointment: newAppointment, // PASAR DATOS
                       ),
                     ),
                     (route) => false,
