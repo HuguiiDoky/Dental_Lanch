@@ -14,7 +14,11 @@ const double kBottomNavigationBarHeight = 80.0;
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
-  const HomeScreen({super.key, this.initialIndex = 0});
+  const HomeScreen({
+    super.key,
+    this.initialIndex = 0,
+    Map<String, String>? newAppointment,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -49,16 +53,128 @@ class _HomeScreenState extends State<HomeScreen> {
     _onItemTapped(kProfilePageIndex);
   }
 
+  // --- HELPER: Parseo Inteligente (Soporte Español y Timestamps) ---
+  DateTime? _parseSmartDate(Map<String, dynamic> data) {
+    // Intentamos buscar la fecha en varios campos posibles
+    var rawDate = data['fechaISO'] ?? data['fecha'];
+    if (rawDate == null) return null;
+
+    // CASO 1: Es un objeto Timestamp de Firebase directamente
+    if (rawDate is Timestamp) {
+      return rawDate.toDate();
+    }
+
+    // CASO 2: Es un String
+    String dateStr = rawDate.toString().trim();
+
+    // Limpieza: Si viene como "Timestamp(seconds=...)" en string (error común de importación)
+    if (dateStr.startsWith('Timestamp')) {
+      try {
+        // Extraer segundos
+        final secondsPart = dateStr.split('seconds=')[1].split(',')[0];
+        final seconds = int.parse(secondsPart);
+        return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+      } catch (_) {}
+    }
+
+    // CASO 3: Formato Texto Español (ej: "Viernes, 16 de Ene 2026 - 03:00 PM")
+    // Este es el formato que se ve en tus capturas.
+    try {
+      // 1. Limpiar día de la semana (lo que está antes de la primera coma)
+      String cleanDate = dateStr;
+      if (dateStr.contains(',')) {
+        cleanDate = dateStr.split(',')[1].trim(); // "16 de Ene 2026 - 03:00 PM"
+      }
+
+      // 2. Separar fecha y hora
+      String datePart = cleanDate;
+      String timePart = "";
+
+      if (cleanDate.contains('-')) {
+        var parts = cleanDate.split('-');
+        datePart = parts[0].trim(); // "16 de Ene 2026"
+        if (parts.length > 1) timePart = parts[1].trim(); // "03:00 PM"
+      }
+
+      // 3. Parsear la fecha (día mes año)
+      var dateTokens = datePart.split(' '); // ["16", "de", "Ene", "2026"]
+      // Filtramos "de" para quedarnos con [16, Ene, 2026]
+      dateTokens = dateTokens.where((t) => t.toLowerCase() != 'de').toList();
+
+      if (dateTokens.length >= 3) {
+        int day = int.parse(dateTokens[0]);
+        int year = int.parse(dateTokens[2]);
+        String monthStr = dateTokens[1].toLowerCase().substring(0, 3); // "ene"
+
+        // Mapa de meses
+        const mapMeses = {
+          'ene': 1,
+          'jan': 1,
+          'feb': 2,
+          'mar': 3,
+          'abr': 4,
+          'apr': 4,
+          'may': 5,
+          'jun': 6,
+          'jul': 7,
+          'ago': 8,
+          'aug': 8,
+          'sep': 9,
+          'oct': 10,
+          'nov': 11,
+          'dic': 12,
+          'dec': 12,
+        };
+
+        int month = mapMeses[monthStr] ?? 1;
+
+        DateTime parsedDate = DateTime(year, month, day);
+
+        // 4. Agregar Hora si existe
+        if (timePart.isNotEmpty) {
+          // Formato esperado: "03:00 PM" o "10:00 AM"
+          bool isPM = timePart.toUpperCase().contains('PM');
+          bool isAM = timePart.toUpperCase().contains('AM');
+
+          // Quitar letras para dejar solo "03:00"
+          String cleanTime = timePart.replaceAll(RegExp(r'[A-Z\s]'), '');
+          var tParts = cleanTime.split(':');
+
+          if (tParts.length == 2) {
+            int h = int.parse(tParts[0]);
+            int m = int.parse(tParts[1]);
+
+            if (isPM && h < 12) h += 12;
+            if (isAM && h == 12) h = 0;
+
+            parsedDate = DateTime(year, month, day, h, m);
+          }
+        }
+        return parsedDate;
+      }
+    } catch (e) {
+      // Fallo el parseo de texto español
+    }
+
+    // CASO 4: Fallback ISO (yyyy-mm-dd)
+    try {
+      return DateTime.parse(dateStr);
+    } catch (_) {}
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: _firestoreService.getUserAppointments(),
       builder: (context, snapshot) {
-        List<Map<String, dynamic>> appointments = [];
+        List<Map<String, dynamic>> allAppointments = [];
+        Map<String, dynamic>? nextAppointment;
 
-        if (snapshot.hasData) {
-          // 1. Convertir docs a lista
-          final rawDocs = snapshot.data!.docs.map((doc) {
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          // 1. Convertir documentos a Objetos con fecha real parseada
+          var rawList = snapshot.data!.docs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
 
             String nombreServicio = (data['nombreServicio'] ?? 'Tratamiento')
@@ -66,55 +182,57 @@ class _HomeScreenState extends State<HomeScreen> {
             String nombreOdonto = (data['nombreOdonto'] ?? 'Odontólogo')
                 .toString();
             String apellidoOdonto = (data['apellidoOdonto'] ?? '').toString();
-            String fechaTexto = (data['fecha'] ?? 'Fecha pendiente').toString();
-            String fechaISO = (data['fechaISO'] ?? '').toString();
-
             String doctorDisplay = 'Odont. $nombreOdonto $apellidoOdonto'
                 .trim();
 
-            return <String, dynamic>{
+            // Detectamos si el campo fecha visual ya tiene la hora integrada
+            // (Como en "Viernes... - 03:00 PM")
+            String displayDate = (data['fecha'] ?? 'Pendiente').toString();
+
+            // Intentamos parsear
+            DateTime? realDate = _parseSmartDate(data);
+
+            return {
               'treatment': nombreServicio,
               'doctor': doctorDisplay,
-              'date': fechaTexto,
-              'fechaISO': fechaISO,
-              'hora_inicio': (data['hora_inicio'] ?? '00:00').toString(),
+              'date': displayDate,
+              'realDate': realDate,
             };
           }).toList();
 
-          // 2. Ordenar por fecha (fechaISO)
-          rawDocs.sort((a, b) {
-            String dateA = (a['fechaISO'] ?? '').toString();
-            String dateB = (b['fechaISO'] ?? '').toString();
-            // Comparación de Strings ISO es segura para fechas (YYYY-MM-DD...)
-            // "2026-01-09" es menor que "2026-01-10"
-            return dateA.compareTo(dateB);
+          // 2. Filtrar solo las fechas válidas
+          var validList = rawList
+              .where((app) => app['realDate'] != null)
+              .toList();
+
+          // 3. Ordenar TODAS cronológicamente para la lista "Mis Citas"
+          validList.sort((a, b) {
+            return (a['realDate'] as DateTime).compareTo(
+              b['realDate'] as DateTime,
+            );
           });
 
-          // 3. Filtrar citas pasadas
+          allAppointments = validList;
+
+          // 4. Encontrar la "Próxima Cita"
           final now = DateTime.now();
-          // Usamos una tolerancia de 2 horas atrás para que la cita no desaparezca apenas empieza
-          final threshold = now.subtract(const Duration(hours: 2));
+          // Margen de 1 hora: Si la cita es hoy a las 9am y son las 9:30, todavía la muestra un rato.
+          final threshold = now.subtract(const Duration(hours: 1));
 
-          appointments = rawDocs.where((app) {
-            String isoStr = (app['fechaISO'] ?? '').toString();
-            if (isoStr.isEmpty) return false;
-            try {
-              DateTime date = DateTime.parse(isoStr);
-              return date.isAfter(threshold);
-            } catch (e) {
-              return false;
-            }
-          }).toList();
-
-          // Si todas son pasadas, mostramos la lista vacía o la última (opcional)
-          // appointments = rawDocs; // Descomentar para ver TODAS sin filtrar pasadas
+          try {
+            // firstWhere devuelve el primer elemento que cumple la condición
+            // Como la lista ya está ordenada (paso 3), la primera que sea mayor a 'ahora' es la más próxima.
+            nextAppointment = validList.firstWhere((app) {
+              return (app['realDate'] as DateTime).isAfter(threshold);
+            });
+          } catch (e) {
+            nextAppointment = null;
+          }
         }
 
         final List<Widget> widgetOptions = <Widget>[
-          _HomeScreenContent(
-            appointments: appointments,
-          ), // Lista ordenada y filtrada
-          AppointmentsScreen(appointments: appointments),
+          _HomeScreenContent(appointment: nextAppointment),
+          AppointmentsScreen(appointments: allAppointments),
           const Center(
             child: Text(
               'Notificaciones',
@@ -171,9 +289,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _HomeScreenContent extends StatefulWidget {
-  final List<Map<String, dynamic>> appointments;
+  final Map<String, dynamic>? appointment;
 
-  const _HomeScreenContent({required this.appointments});
+  const _HomeScreenContent({this.appointment});
 
   @override
   State<_HomeScreenContent> createState() => __HomeScreenContentState();
@@ -187,12 +305,7 @@ class __HomeScreenContentState extends State<_HomeScreenContent> {
   @override
   Widget build(BuildContext context) {
     final homeScreenState = context.findAncestorStateOfType<_HomeScreenState>();
-
-    // Al estar la lista ya ordenada por fecha (ascendente) y filtrada (futuras),
-    // el primer elemento SIEMPRE es la cita más próxima.
-    final nextAppointment = widget.appointments.isNotEmpty
-        ? widget.appointments.first
-        : null;
+    final nextAppointment = widget.appointment;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -200,27 +313,7 @@ class __HomeScreenContentState extends State<_HomeScreenContent> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FutureBuilder<Map<String, dynamic>?>(
-              future: _firestoreService.getUserData(),
-              builder: (context, snapshot) {
-                String userName = 'Cargando...';
-                String initials = '...';
-                if (snapshot.hasData && snapshot.data != null) {
-                  final data = snapshot.data!;
-                  final nombres = (data['nombres'] ?? data['name'] ?? 'Usuario')
-                      .toString();
-                  final apellidos = (data['apellidos'] ?? data['surname'] ?? '')
-                      .toString();
-                  userName = '$nombres $apellidos';
-                  if (nombres.isNotEmpty) {
-                    initials =
-                        '${nombres[0]}${apellidos.isNotEmpty ? apellidos[0] : ""}'
-                            .toUpperCase();
-                  }
-                }
-                return _buildHeader(userName, initials);
-              },
-            ),
+            _buildHeader(),
             const SizedBox(height: 30),
             _buildNextAppointmentCard(nextAppointment),
             const SizedBox(height: 40),
@@ -264,43 +357,70 @@ class __HomeScreenContentState extends State<_HomeScreenContent> {
     );
   }
 
-  Widget _buildHeader(String name, String initials) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Bienvenido,',
-                style: TextStyle(color: kTextGrayColor, fontSize: 18),
+  Widget _buildHeader() {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _firestoreService.getUserData(),
+      builder: (context, snapshot) {
+        String name = 'Cargando...';
+        String initials = '...';
+
+        if (snapshot.hasData && snapshot.data != null) {
+          final data = snapshot.data!;
+          final n = (data['nombres'] ?? data['name'] ?? 'Usuario').toString();
+          final a = (data['apellidos'] ?? data['surname'] ?? '').toString();
+          final rol = (data['rol'] ?? '').toString();
+
+          String prefix = '';
+          if (rol == 'odontologo') {
+            prefix = 'Odont. ';
+          }
+
+          name = '$prefix$n $a'.trim();
+
+          if (n.isNotEmpty) {
+            initials =
+                n[0].toUpperCase() + (a.isNotEmpty ? a[0].toUpperCase() : '');
+          }
+        }
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Bienvenido,',
+                    style: TextStyle(color: kTextGrayColor, fontSize: 18),
+                  ),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: kLogoGrayColor,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              Text(
-                name,
+            ),
+            CircleAvatar(
+              radius: 35,
+              backgroundColor: kPrimaryColor,
+              child: Text(
+                initials,
                 style: const TextStyle(
-                  color: kLogoGrayColor,
-                  fontSize: 26,
+                  fontSize: 30,
+                  color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
-        ),
-        CircleAvatar(
-          radius: 35,
-          backgroundColor: kPrimaryColor,
-          child: Text(
-            initials,
-            style: const TextStyle(
-              fontSize: 30,
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 

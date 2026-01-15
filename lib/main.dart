@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'presentacion/pantallas/login_screen.dart';
 import 'presentacion/pantallas/register_type.dart';
-import 'presentacion/pantallas/home_screen.dart'; // Importante para la redirección
+import 'presentacion/pantallas/home_screen.dart';
 import 'constants.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Para verificar estado
+import 'package:firebase_auth/firebase_auth.dart';
+import 'presentacion/pantallas/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,21 +23,30 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Dental Lanch',
       theme: ThemeData(primarySwatch: Colors.pink),
-      // Usamos un StreamBuilder para escuchar el estado de autenticación
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasData) {
-            // Si hay usuario, vamos al Home
-            return const HomeScreen();
-          }
-          // Si no, vamos a la pantalla de bienvenida
-          return const WelcomeScreen();
-        },
-      ),
+      // CAMBIO: Ahora iniciamos en el Splash
+      home: const SplashScreen(),
+    );
+  }
+}
+
+// Este widget es el que decide a dónde ir después del Splash
+// Lo usaremos en la navegación desde splash_screen.dart
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasData) {
+          return const HomeScreen();
+        }
+        return const WelcomeScreen();
+      },
     );
   }
 }

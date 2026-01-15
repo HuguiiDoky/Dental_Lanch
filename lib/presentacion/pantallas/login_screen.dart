@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Importante para auth errors
 import '../../constants.dart';
 import 'home_screen.dart';
 import '../../services/auth_service.dart'; // Importa tu servicio
@@ -16,7 +17,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
 
   bool _isPasswordVisible = false;
-  bool _isLoading = false; // Estado de carga
+  bool _isLoading = false; // Estado de carga para Login
+  bool _isResetLoading = false; // Estado de carga para Reset Password
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   void _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -42,17 +51,80 @@ class _LoginScreenState extends State<LoginScreen> {
           (route) => false,
         );
       }
+    } on FirebaseAuthException catch (e) {
+      String message = 'Error al iniciar sesión';
+      if (e.code == 'user-not-found') {
+        message = 'No existe una cuenta con este correo.';
+      } else if (e.code == 'wrong-password') {
+        message = 'Contraseña incorrecta.';
+      } else if (e.code == 'invalid-email') {
+        message = 'El correo no es válido.';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.red),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al iniciar sesión: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- NUEVA FUNCIÓN: RECUPERAR CONTRASEÑA ---
+  void _resetPassword() async {
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Por favor, escribe tu correo electrónico primero para enviarte el enlace.',
+          ),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isResetLoading = true);
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '¡Correo enviado! Revisa tu bandeja de entrada para restablecer tu contraseña.',
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMsg = 'No se pudo enviar el correo.';
+      if (e.code == 'user-not-found') {
+        errorMsg = 'No existe una cuenta con este correo.';
+      } else if (e.code == 'invalid-email') {
+        errorMsg = 'El formato del correo es incorrecto.';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isResetLoading = false);
     }
   }
 
@@ -140,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 40),
 
-                // Botón Iniciar Sesión con Loading
+                // Botón Iniciar Sesión
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -172,8 +244,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                   ),
                 ),
+
                 const SizedBox(height: 30),
 
+                // Enlace de "Olvidaste tu contraseña"
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -181,22 +255,28 @@ class _LoginScreenState extends State<LoginScreen> {
                       '¿Olvidaste tu contraseña? ',
                       style: TextStyle(color: kTextGrayColor, fontSize: 14),
                     ),
-                    TextButton(
-                      onPressed: () {}, // Implementar reset password luego
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        'Click aquí',
-                        style: TextStyle(
-                          color: kPrimaryColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    _isResetLoading
+                        ? const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : TextButton(
+                            onPressed: _resetPassword, // CONECTADO
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Click aquí',
+                              style: TextStyle(
+                                color: kPrimaryColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                   ],
                 ),
                 const SizedBox(height: 40),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Importación directa para asegurar datos
-import 'package:firebase_auth/firebase_auth.dart'; // Importación directa para Auth
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../constants.dart';
 import '../../main.dart'; // Para ir a WelcomeScreen
 import '../../services/auth_service.dart';
@@ -75,7 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // ignore: avoid_print
               print("DEBUG - Datos obtenidos: $data");
 
-              // Extraer nombres y apellidos con seguridad (soporta 'nombres' o 'name')
+              // Extraer nombres y apellidos con seguridad
               final String nombres = (data['nombres'] ?? data['name'] ?? '')
                   .toString()
                   .trim();
@@ -84,14 +84,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       .toString()
                       .trim();
 
-              // --- A. NOMBRE COMPLETO ---
+              // --- CAMBIO CLAVE AQUÍ: Verificar Rol ---
+              final String rol = (data['rol'] ?? '').toString();
+              String prefix = '';
+
+              if (rol == 'odontologo') {
+                prefix = 'Odont. ';
+              }
+
+              // --- A. NOMBRE COMPLETO CON PREFIJO ---
               if (nombres.isNotEmpty || apellidos.isNotEmpty) {
-                displayName = '$nombres $apellidos'.trim();
+                // Si es odontólogo, quedará "Odont. Nombre Apellido"
+                displayName = '$prefix$nombres $apellidos'.trim();
               } else {
                 displayName = 'Usuario sin nombre';
               }
 
-              // --- B. EMAIL (Preferimos el de la BD, si no el de Auth) ---
+              // --- B. EMAIL ---
               if (data['email'] != null &&
                   data['email'].toString().isNotEmpty) {
                 email = data['email'];
@@ -106,9 +115,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               initials = (letraN + letraA).toUpperCase();
 
-              // Fallback: Si no hay iniciales (ej. campos vacíos), usar primera letra del display name
+              // Fallback para iniciales
               if (initials.isEmpty && displayName.isNotEmpty) {
-                initials = displayName[0].toUpperCase();
+                // Si tiene prefijo "Odont.", tomamos la inicial del nombre real (después del espacio)
+                // O simplificamos tomando la primera letra disponible que no sea O de Odont si prefieres
+                // Por ahora mantenemos lógica simple:
+                if (nombres.isNotEmpty) {
+                  initials = nombres[0].toUpperCase();
+                } else {
+                  initials = displayName[0].toUpperCase();
+                }
               }
             } else if (snapshot.connectionState == ConnectionState.done) {
               // Si terminó de cargar y no hay datos
@@ -144,7 +160,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // Círculo de Avatar con Iniciales
+                    // Círculo de Avatar
                     CircleAvatar(
                       radius: 60,
                       backgroundColor: kPrimaryColor,
@@ -161,7 +177,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Nombre Completo
+                    // Nombre Completo (Ahora con prefijo si corresponde)
                     Text(
                       displayName,
                       style: const TextStyle(
@@ -199,7 +215,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onTap: () {},
                     ),
                     const SizedBox(height: 20),
-
                     _buildProfileCard(
                       title: 'Cerrar Sesión',
                       icon: Icons.logout,
@@ -236,7 +251,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return GestureDetector(
       onTap: () {
-        setState(() => _selectedCardIndex = index);
+        setState(() {
+          _selectedCardIndex = index;
+        });
         onTap();
       },
       child: Container(
