@@ -53,60 +53,48 @@ class _HomeScreenState extends State<HomeScreen> {
     _onItemTapped(kProfilePageIndex);
   }
 
-  // --- HELPER: Parseo Inteligente (Soporte Español y Timestamps) ---
+  // --- HELPER: Parseo Inteligente ---
   DateTime? _parseSmartDate(Map<String, dynamic> data) {
-    // Intentamos buscar la fecha en varios campos posibles
     var rawDate = data['fechaISO'] ?? data['fecha'];
     if (rawDate == null) return null;
 
-    // CASO 1: Es un objeto Timestamp de Firebase directamente
     if (rawDate is Timestamp) {
       return rawDate.toDate();
     }
 
-    // CASO 2: Es un String
     String dateStr = rawDate.toString().trim();
 
-    // Limpieza: Si viene como "Timestamp(seconds=...)" en string (error común de importación)
     if (dateStr.startsWith('Timestamp')) {
       try {
-        // Extraer segundos
         final secondsPart = dateStr.split('seconds=')[1].split(',')[0];
         final seconds = int.parse(secondsPart);
         return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
       } catch (_) {}
     }
 
-    // CASO 3: Formato Texto Español (ej: "Viernes, 16 de Ene 2026 - 03:00 PM")
-    // Este es el formato que se ve en tus capturas.
     try {
-      // 1. Limpiar día de la semana (lo que está antes de la primera coma)
       String cleanDate = dateStr;
       if (dateStr.contains(',')) {
-        cleanDate = dateStr.split(',')[1].trim(); // "16 de Ene 2026 - 03:00 PM"
+        cleanDate = dateStr.split(',')[1].trim();
       }
 
-      // 2. Separar fecha y hora
       String datePart = cleanDate;
       String timePart = "";
 
       if (cleanDate.contains('-')) {
         var parts = cleanDate.split('-');
-        datePart = parts[0].trim(); // "16 de Ene 2026"
-        if (parts.length > 1) timePart = parts[1].trim(); // "03:00 PM"
+        datePart = parts[0].trim();
+        if (parts.length > 1) timePart = parts[1].trim();
       }
 
-      // 3. Parsear la fecha (día mes año)
-      var dateTokens = datePart.split(' '); // ["16", "de", "Ene", "2026"]
-      // Filtramos "de" para quedarnos con [16, Ene, 2026]
+      var dateTokens = datePart.split(' ');
       dateTokens = dateTokens.where((t) => t.toLowerCase() != 'de').toList();
 
       if (dateTokens.length >= 3) {
         int day = int.parse(dateTokens[0]);
         int year = int.parse(dateTokens[2]);
-        String monthStr = dateTokens[1].toLowerCase().substring(0, 3); // "ene"
+        String monthStr = dateTokens[1].toLowerCase().substring(0, 3);
 
-        // Mapa de meses
         const mapMeses = {
           'ene': 1,
           'jan': 1,
@@ -127,36 +115,27 @@ class _HomeScreenState extends State<HomeScreen> {
         };
 
         int month = mapMeses[monthStr] ?? 1;
-
         DateTime parsedDate = DateTime(year, month, day);
 
-        // 4. Agregar Hora si existe
         if (timePart.isNotEmpty) {
-          // Formato esperado: "03:00 PM" o "10:00 AM"
           bool isPM = timePart.toUpperCase().contains('PM');
           bool isAM = timePart.toUpperCase().contains('AM');
-
-          // Quitar letras para dejar solo "03:00"
           String cleanTime = timePart.replaceAll(RegExp(r'[A-Z\s]'), '');
           var tParts = cleanTime.split(':');
 
           if (tParts.length == 2) {
             int h = int.parse(tParts[0]);
             int m = int.parse(tParts[1]);
-
             if (isPM && h < 12) h += 12;
             if (isAM && h == 12) h = 0;
-
             parsedDate = DateTime(year, month, day, h, m);
           }
         }
         return parsedDate;
       }
-    } catch (e) {
-      // Fallo el parseo de texto español
-    }
+      // ignore: empty_catches
+    } catch (e) {}
 
-    // CASO 4: Fallback ISO (yyyy-mm-dd)
     try {
       return DateTime.parse(dateStr);
     } catch (_) {}
@@ -173,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Map<String, dynamic>? nextAppointment;
 
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          // 1. Convertir documentos a Objetos con fecha real parseada
+          // 1. Convertir documentos a Objetos
           var rawList = snapshot.data!.docs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
 
@@ -184,12 +163,11 @@ class _HomeScreenState extends State<HomeScreen> {
             String apellidoOdonto = (data['apellidoOdonto'] ?? '').toString();
             String doctorDisplay = 'Odont. $nombreOdonto $apellidoOdonto'
                 .trim();
-
-            // Detectamos si el campo fecha visual ya tiene la hora integrada
-            // (Como en "Viernes... - 03:00 PM")
             String displayDate = (data['fecha'] ?? 'Pendiente').toString();
+            String estado = (data['estado'] ?? 'pendiente')
+                .toString()
+                .toLowerCase();
 
-            // Intentamos parsear
             DateTime? realDate = _parseSmartDate(data);
 
             return {
@@ -197,15 +175,16 @@ class _HomeScreenState extends State<HomeScreen> {
               'doctor': doctorDisplay,
               'date': displayDate,
               'realDate': realDate,
+              'status': estado,
             };
           }).toList();
 
-          // 2. Filtrar solo las fechas válidas
+          // 2. Filtrar fechas válidas
           var validList = rawList
               .where((app) => app['realDate'] != null)
               .toList();
 
-          // 3. Ordenar TODAS cronológicamente para la lista "Mis Citas"
+          // 3. Ordenar cronológicamente
           validList.sort((a, b) {
             return (a['realDate'] as DateTime).compareTo(
               b['realDate'] as DateTime,
@@ -216,14 +195,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // 4. Encontrar la "Próxima Cita"
           final now = DateTime.now();
-          // Margen de 1 hora: Si la cita es hoy a las 9am y son las 9:30, todavía la muestra un rato.
           final threshold = now.subtract(const Duration(hours: 1));
 
           try {
-            // firstWhere devuelve el primer elemento que cumple la condición
-            // Como la lista ya está ordenada (paso 3), la primera que sea mayor a 'ahora' es la más próxima.
+            // Buscamos la primera cita futura y activa
             nextAppointment = validList.firstWhere((app) {
-              return (app['realDate'] as DateTime).isAfter(threshold);
+              final bool isFuture = (app['realDate'] as DateTime).isAfter(
+                threshold,
+              );
+
+              // --- CORRECCIÓN AQUÍ: Usamos .toString() para asegurar el tipo ---
+              final String status = (app['status'] ?? '').toString();
+
+              final bool isActive =
+                  status != 'cancelada' && status != 'expirada';
+
+              return isFuture && isActive;
             });
           } catch (e) {
             nextAppointment = null;

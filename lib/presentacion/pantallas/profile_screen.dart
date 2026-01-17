@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../constants.dart';
-import '../../main.dart'; // Para ir a WelcomeScreen
+import '../../main.dart';
 import '../../services/auth_service.dart';
+import 'security_screen.dart'; // <--- IMPORTANTE: Importamos la pantalla de seguridad
 
-// Definimos la altura si no está en constants
 const double kBottomNavigationBarHeight = 80.0;
 
 class ProfileScreen extends StatefulWidget {
@@ -18,8 +18,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   int? _selectedCardIndex;
   final AuthService _authService = AuthService();
-
-  // Obtenemos el usuario actual de Auth directamente
   final User? user = FirebaseAuth.instance.currentUser;
 
   void _logout() async {
@@ -37,7 +35,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    // Medida de seguridad: Si no hay usuario, mostrar mensaje
     if (user == null) {
       return const Scaffold(body: Center(child: Text("No hay sesión activa")));
     }
@@ -45,37 +42,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        // USAMOS STREAMBUILDER: Escucha directa a la base de datos en tiempo real
         child: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance
-              .collection('usuarios') // Tu colección exacta
-              .doc(user!.uid) // El ID del usuario
+              .collection('usuarios')
+              .doc(user!.uid)
               .snapshots(),
           builder: (context, snapshot) {
-            // -- VALORES POR DEFECTO --
             String displayName = 'Cargando...';
             String email = user?.email ?? 'Sin correo';
             String initials = '';
             bool isLoading = true;
 
-            // 1. Manejo de Errores
             if (snapshot.hasError) {
               displayName = 'Error al cargar';
               isLoading = false;
             }
 
-            // 2. Si hay datos, procesarlos
             if (snapshot.hasData &&
                 snapshot.data != null &&
                 snapshot.data!.exists) {
               isLoading = false;
               final data = snapshot.data!.data() as Map<String, dynamic>;
 
-              // Imprimir en consola para depuración
-              // ignore: avoid_print
-              print("DEBUG - Datos obtenidos: $data");
-
-              // Extraer nombres y apellidos con seguridad
               final String nombres = (data['nombres'] ?? data['name'] ?? '')
                   .toString()
                   .trim();
@@ -83,8 +71,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   (data['apellidos'] ?? data['surname'] ?? '')
                       .toString()
                       .trim();
-
-              // --- CAMBIO CLAVE AQUÍ: Verificar Rol ---
               final String rol = (data['rol'] ?? '').toString();
               String prefix = '';
 
@@ -92,34 +78,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 prefix = 'Odont. ';
               }
 
-              // --- A. NOMBRE COMPLETO CON PREFIJO ---
               if (nombres.isNotEmpty || apellidos.isNotEmpty) {
-                // Si es odontólogo, quedará "Odont. Nombre Apellido"
                 displayName = '$prefix$nombres $apellidos'.trim();
               } else {
                 displayName = 'Usuario sin nombre';
               }
 
-              // --- B. EMAIL ---
               if (data['email'] != null &&
                   data['email'].toString().isNotEmpty) {
                 email = data['email'];
               }
 
-              // --- C. INICIALES (Letra 1 Nombre + Letra 1 Apellido) ---
+              // Calcular iniciales
               String letraN = '';
               String letraA = '';
-
               if (nombres.isNotEmpty) letraN = nombres[0];
               if (apellidos.isNotEmpty) letraA = apellidos[0];
-
               initials = (letraN + letraA).toUpperCase();
 
-              // Fallback para iniciales
               if (initials.isEmpty && displayName.isNotEmpty) {
-                // Si tiene prefijo "Odont.", tomamos la inicial del nombre real (después del espacio)
-                // O simplificamos tomando la primera letra disponible que no sea O de Odont si prefieres
-                // Por ahora mantenemos lógica simple:
                 if (nombres.isNotEmpty) {
                   initials = nombres[0].toUpperCase();
                 } else {
@@ -127,12 +104,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }
               }
             } else if (snapshot.connectionState == ConnectionState.done) {
-              // Si terminó de cargar y no hay datos
               isLoading = false;
               displayName = 'Usuario no encontrado';
             }
 
-            // -- INTERFAZ GRÁFICA --
             return SingleChildScrollView(
               child: Container(
                 width: double.infinity,
@@ -160,7 +135,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // Círculo de Avatar
                     CircleAvatar(
                       radius: 60,
                       backgroundColor: kPrimaryColor,
@@ -177,7 +151,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Nombre Completo (Ahora con prefijo si corresponde)
                     Text(
                       displayName,
                       style: const TextStyle(
@@ -189,7 +162,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // Correo
                     Text(
                       email,
                       style: const TextStyle(
@@ -199,26 +171,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 40),
 
-                    // Botones de acción
-                    _buildProfileCard(
-                      title: 'Editar Perfil',
-                      icon: Icons.person_outline,
-                      index: 0,
-                      onTap: () {},
-                    ),
-                    const SizedBox(height: 20),
+                    // BOTÓN 1: SEGURIDAD (CONECTADO)
                     _buildProfileCard(
                       title: 'Seguridad',
                       icon: Icons.shield_outlined,
-                      index: 1,
+                      index: 0,
                       showArrow: true,
-                      onTap: () {},
+                      onTap: () {
+                        // AQUÍ ESTÁ LA MAGIA: Navegamos a la pantalla de seguridad
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SecurityScreen(),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 20),
+
+                    // BOTÓN 2: CERRAR SESIÓN
                     _buildProfileCard(
                       title: 'Cerrar Sesión',
                       icon: Icons.logout,
-                      index: 2,
+                      index: 1,
                       isDestructive: true,
                       onTap: _logout,
                     ),

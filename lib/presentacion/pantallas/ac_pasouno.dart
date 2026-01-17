@@ -62,7 +62,6 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Leemos de la colección 'servicios'
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('servicios')
@@ -83,31 +82,25 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
                           );
                         }
 
-                        final services = snapshot.data!.docs;
-
                         return Column(
-                          children: services.map((doc) {
+                          children: snapshot.data!.docs.map((doc) {
                             final data = doc.data() as Map<String, dynamic>;
                             final String id = doc.id;
-
-                            // Extraemos datos asegurando que sean String
                             final String title =
                                 (data['nombreServicio'] ?? 'Servicio')
                                     .toString();
                             final String descripcion =
                                 (data['descripcion'] ?? '').toString();
 
-                            // Manejo seguro de la duración
-                            String duracionStr = '30 min';
-                            if (data['duracion'] != null) {
-                              String d = data['duracion'].toString();
-                              duracionStr = d.toLowerCase().contains('min')
-                                  ? d
-                                  : '$d min';
-                            }
+                            // --- EXTRACCIÓN ROBUSTA DE DURACIÓN ---
+                            // Forzamos a String para evitar errores de tipo
+                            var rawDuracion = data['duracion'];
+                            String duracionStr = rawDuracion != null
+                                ? rawDuracion.toString()
+                                : '30';
 
-                            final String subtitle =
-                                '$duracionStr - $descripcion';
+                            var rawPrecio = data['precio'] ?? 0;
+                            String subtitle = '$duracionStr min - $descripcion';
 
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16.0),
@@ -115,10 +108,14 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
                                 title: title,
                                 subtitle: subtitle,
                                 id: id,
+                                // AQUÍ ENVIAMOS EL DATO "rawDuration"
                                 fullData: {
                                   'id': id,
                                   'title': title,
                                   'subtitle': subtitle,
+                                  'rawDuration':
+                                      duracionStr, // ESTE ES EL DATO IMPORTANTE
+                                  'price': rawPrecio.toString(),
                                 },
                               ),
                             );
@@ -134,6 +131,7 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
               padding: const EdgeInsets.all(24.0),
               decoration: BoxDecoration(
                 color: Colors.white,
+                // ignore: deprecated_member_use
                 boxShadow: [
                   BoxShadow(
                     // ignore: deprecated_member_use
@@ -195,12 +193,10 @@ class _ScheduleAppointmentScreenState extends State<ScheduleAppointmentScreen> {
     final Color borderColor = isSelected ? kPrimaryColor : kBorderGrayColor;
 
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedServiceId = id;
-          _selectedServiceData = fullData;
-        });
-      },
+      onTap: () => setState(() {
+        _selectedServiceId = id;
+        _selectedServiceData = fullData;
+      }),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16.0),

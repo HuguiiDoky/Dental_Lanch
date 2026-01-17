@@ -6,11 +6,7 @@ class FirestoreService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // --- USUARIOS ---
-  // Colección: "usuarios"
-  // Campos: uid, nombres, apellidos, email, rol, genero, cedula, especialidad
-
   Future<void> saveUser(String uid, Map<String, dynamic> userData) async {
-    // Aseguramos que el uid esté dentro del documento como campo también
     userData['uid'] = uid;
     await _db.collection('usuarios').doc(uid).set(userData);
   }
@@ -28,31 +24,22 @@ class FirestoreService {
   }
 
   // --- SERVICIOS ---
-  // Colección: "servicios"
-  // Campos: descripcion, duracion, nombreServicio, precio
-
   Stream<QuerySnapshot> getServices() {
     return _db.collection('servicios').snapshots();
   }
 
   // --- CITAS ---
-  // Colección: "citas"
-  // Campos: IDodonto, IDpaciente, IDservicio, apellidoOdonto, apellidoPaciente,
-  //         estado, fecha, nombreOdonto, nombrePaciente, nombreServicio.
-
   Future<void> createAppointment(Map<String, dynamic> appointmentData) async {
     User? user = _auth.currentUser;
     if (user != null) {
-      // Obtenemos los datos del paciente actual para llenar apellidoPaciente y nombrePaciente
+      // Obtenemos datos del paciente
       Map<String, dynamic>? patientData = await getUserData();
 
       if (patientData != null) {
         await _db.collection('citas').add({
           // IDs
           'IDpaciente': user.uid,
-          'IDodonto':
-              appointmentData['IDodonto'] ??
-              'no-id-odonto', // Debería venir del flujo anterior
+          'IDodonto': appointmentData['IDodonto'] ?? 'no-id-odonto',
           'IDservicio': appointmentData['IDservicio'] ?? 'no-id-servicio',
 
           // Datos Paciente
@@ -66,11 +53,16 @@ class FirestoreService {
           // Datos Servicio
           'nombreServicio': appointmentData['nombreServicio'],
 
+          // --- AQUÍ ESTABA EL FALTANTE: Agregamos los campos vitales ---
+          'duracion':
+              appointmentData['duracion'] ?? 30, // Guardamos la duración (int)
+          'fechaISO':
+              appointmentData['fechaISO'], // Guardamos fecha ISO para validaciones
+          'hora_inicio':
+              appointmentData['hora_inicio'], // Guardamos hora visual
           // Detalles Cita
-          'fecha':
-              appointmentData['fecha'], // String o Timestamp según prefieras
-          'estado': 'pendiente', // Estado inicial
-          // Metadata extra (opcional pero útil para ordenar)
+          'fecha': appointmentData['fecha'],
+          'estado': 'pendiente',
           'fechaCreacion': FieldValue.serverTimestamp(),
         });
       }
@@ -83,7 +75,6 @@ class FirestoreService {
       return _db
           .collection('citas')
           .where('IDpaciente', isEqualTo: user.uid)
-          //.orderBy('fecha', descending: false) // Asegúrate de crear el índice en Firebase si usas esto
           .snapshots();
     }
     return const Stream.empty();

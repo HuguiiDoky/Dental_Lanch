@@ -76,7 +76,6 @@ class _ScheduleAppointmentStep2ScreenState
                     ),
                     const SizedBox(height: 24),
 
-                    // Consultamos usuarios con rol odontologo
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('usuarios')
@@ -98,14 +97,10 @@ class _ScheduleAppointmentStep2ScreenState
                           );
                         }
 
-                        final dentists = snapshot.data!.docs;
-
                         return Column(
-                          children: dentists.map((doc) {
+                          children: snapshot.data!.docs.map((doc) {
                             final data = doc.data() as Map<String, dynamic>;
                             final String id = doc.id;
-
-                            // 1. OBTENER DATOS PUROS DE LA BD
                             final String nombres =
                                 (data['nombres'] ??
                                         data['name'] ??
@@ -116,33 +111,22 @@ class _ScheduleAppointmentStep2ScreenState
                                     .toString();
                             final String especialidad =
                                 (data['especialidad'] ?? 'General').toString();
-
-                            // 2. FORMATEAR PARA LA VISTA (APP)
                             final String displayName =
                                 'Odont. $nombres $apellidos'.trim();
-
-                            // Iniciales
-                            String initials = 'Dr';
-                            if (nombres.isNotEmpty) {
-                              initials = nombres[0];
-                              if (apellidos.isNotEmpty) {
-                                initials += apellidos[0];
-                              }
-                            }
-                            initials = initials.toUpperCase();
+                            String initials =
+                                (nombres.isNotEmpty ? nombres[0] : '') +
+                                (apellidos.isNotEmpty ? apellidos[0] : '');
 
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16.0),
                               child: _buildDentistCard(
-                                name: displayName, // Se muestra con "Odont."
+                                name: displayName,
                                 specialty: especialidad,
-                                initials: initials,
+                                initials: initials.toUpperCase(),
                                 id: id,
                                 fullData: {
                                   'id': id,
-                                  'name':
-                                      displayName, // Para mostrar en confirmación
-                                  // 3. GUARDAMOS LOS DATOS LIMPIOS PARA USARLOS EN EL PASO 3
+                                  'name': displayName,
                                   'rawName': nombres,
                                   'rawSurname': apellidos,
                                   'specialty': especialidad,
@@ -181,7 +165,8 @@ class _ScheduleAppointmentStep2ScreenState
                             MaterialPageRoute(
                               builder: (context) =>
                                   ScheduleAppointmentStep3Screen(
-                                    serviceData: widget.serviceData,
+                                    serviceData: widget
+                                        .serviceData, // PASAJE DIRECTO DE DATOS
                                     dentistData: _selectedDentistData!,
                                   ),
                             ),
@@ -189,8 +174,6 @@ class _ScheduleAppointmentStep2ScreenState
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kPrimaryColor,
-                    // ignore: deprecated_member_use
-                    disabledBackgroundColor: kBorderGrayColor.withOpacity(0.3),
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -222,17 +205,11 @@ class _ScheduleAppointmentStep2ScreenState
   }) {
     final bool isSelected = _selectedDentistId == id;
     final Color borderColor = isSelected ? kPrimaryColor : kBorderGrayColor;
-    final Color avatarColor =
-        // ignore: deprecated_member_use
-        isSelected ? kPrimaryColor : kLogoGrayColor.withOpacity(0.5);
-
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedDentistId = id;
-          _selectedDentistData = fullData;
-        });
-      },
+      onTap: () => setState(() {
+        _selectedDentistId = id;
+        _selectedDentistData = fullData;
+      }),
       child: Container(
         padding: const EdgeInsets.all(16.0),
         decoration: BoxDecoration(
@@ -244,7 +221,10 @@ class _ScheduleAppointmentStep2ScreenState
           children: [
             CircleAvatar(
               radius: 28,
-              backgroundColor: avatarColor,
+              backgroundColor: isSelected
+                  ? kPrimaryColor
+                  // ignore: deprecated_member_use
+                  : kLogoGrayColor.withOpacity(0.5),
               child: Text(
                 initials,
                 style: const TextStyle(

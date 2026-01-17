@@ -18,7 +18,7 @@ class AppointmentConfirmationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Formatear la fecha manualmente
+    // Formatear la fecha manualmente para mostrarla bonita
     final List<String> days = [
       'Lunes',
       'Martes',
@@ -103,9 +103,9 @@ class AppointmentConfirmationScreen extends StatelessWidget {
                 text: TextSpan(
                   style: const TextStyle(color: kTextGrayColor, fontSize: 16),
                   children: [
-                    const TextSpan(text: 'Tu cita con la '),
+                    const TextSpan(text: 'Tu cita con '), // Ajuste de texto
                     TextSpan(
-                      text: dentistData['name'],
+                      text: dentistData['name'], // "Odont. Juan Perez"
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const TextSpan(text: '\nha sido agendada con éxito.'),
@@ -114,22 +114,34 @@ class AppointmentConfirmationScreen extends StatelessWidget {
               ),
               const SizedBox(height: 40),
 
-              // Fecha y Hora
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.calendar_today, color: kPrimaryColor),
-                  const SizedBox(width: 12),
-                  Text(
-                    formattedDate,
-                    style: const TextStyle(
-                      color: kLogoGrayColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+              // Tarjeta Resumen Fecha y Hora
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.calendar_today, color: kPrimaryColor),
+                    const SizedBox(width: 12),
+                    Text(
+                      formattedDate,
+                      style: const TextStyle(
+                        color: kLogoGrayColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+
               const Spacer(),
 
               // Botón "Ver mis citas"
@@ -137,13 +149,13 @@ class AppointmentConfirmationScreen extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    // --- CORRECCIÓN: Ya no pasamos newAppointment ---
-                    // Simplemente navegamos al tab 1 (Citas), Firebase ya tendrá los datos.
+                    // Navegar al Home -> Pestaña 1 (Mis Citas)
+                    // Usamos pushAndRemoveUntil para que no puedan volver atrás al formulario
                     Navigator.pushAndRemoveUntil(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const HomeScreen(
-                          initialIndex: 1, // Ir a pestaña Citas
+                          initialIndex: 1, // 1 = Pestaña de Citas
                         ),
                       ),
                       (route) => false,
@@ -171,12 +183,12 @@ class AppointmentConfirmationScreen extends StatelessWidget {
               // Botón "Volver al inicio"
               TextButton(
                 onPressed: () {
-                  // --- CORRECCIÓN: Ya no pasamos newAppointment ---
+                  // Navegar al Home -> Pestaña 0 (Dashboard)
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const HomeScreen(
-                        initialIndex: 0, // Ir al Dashboard
+                        initialIndex: 0, // 0 = Home Dashboard
                       ),
                     ),
                     (route) => false,
