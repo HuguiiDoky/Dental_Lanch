@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../constants.dart';
 import '../../main.dart';
 import '../../services/auth_service.dart';
-import 'security_screen.dart'; // <--- IMPORTANTE: Importamos la pantalla de seguridad
+import 'security_screen.dart';
 
 const double kBottomNavigationBarHeight = 80.0;
 
@@ -19,6 +19,97 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int? _selectedCardIndex;
   final AuthService _authService = AuthService();
   final User? user = FirebaseAuth.instance.currentUser;
+
+  // --- FUNCIÓN PARA MOSTRAR EL MODAL "ACERCA DE" ---
+  void _showAboutModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor:
+          Colors.transparent, // Para que se vean los bordes redondeados
+      isScrollControlled: true, // Permite que el modal se ajuste al contenido
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24.0),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Se ajusta al tamaño del contenido
+            children: [
+              // Encabezado con Título y Cerrar (X)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Acerca de',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: kLogoGrayColor,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: kTextGrayColor),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Imagen del logo (info.png)
+              Image.asset(
+                'assets/images/info.png', // Asegúrate de que esta ruta sea correcta en tu pubspec.yaml
+                height: 100,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(height: 24),
+
+              // Nombre de la App
+              const Text(
+                'Dental Lanch',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: kPrimaryColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Versión
+              const Text(
+                'Versión 0.1.0',
+                style: TextStyle(fontSize: 16, color: kTextGrayColor),
+              ),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 24),
+
+              // Desarrollador
+              const Text(
+                'Desarrollada por:',
+                style: TextStyle(fontSize: 14, color: kTextGrayColor),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Hugo Yael Castrejón Salgado',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: kLogoGrayColor,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              // Espacio extra abajo para que no quede pegado al borde del celular
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   void _logout() async {
     await _authService.signOut();
@@ -171,14 +262,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 40),
 
-                    // BOTÓN 1: SEGURIDAD (CONECTADO)
+                    // BOTÓN 1: SEGURIDAD (Índice 0)
                     _buildProfileCard(
                       title: 'Seguridad',
                       icon: Icons.shield_outlined,
                       index: 0,
                       showArrow: true,
                       onTap: () {
-                        // AQUÍ ESTÁ LA MAGIA: Navegamos a la pantalla de seguridad
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -189,13 +279,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // BOTÓN 2: CERRAR SESIÓN
+                    // BOTÓN 2: ACERCA DE (NUEVO - Índice 1)
+                    _buildProfileCard(
+                      title: 'Acerca de',
+                      icon: Icons.info_outline, // Icono de información
+                      index: 1,
+                      showArrow: true,
+                      onTap: () {
+                        _showAboutModal(
+                          context,
+                        ); // Llama a la función del modal
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    // BOTÓN 3: CERRAR SESIÓN (Índice 2)
                     _buildProfileCard(
                       title: 'Cerrar Sesión',
                       icon: Icons.logout,
-                      index: 1,
+                      index: 2,
                       isDestructive: true,
                       onTap: _logout,
+                    ),
+
+                    // ESPACIO Y VERSIÓN AL PIE
+                    const SizedBox(height: 40),
+                    const Text(
+                      'Dental Lanch v0.1.0',
+                      style: TextStyle(color: kTextGrayColor, fontSize: 14),
                     ),
                   ],
                 ),
