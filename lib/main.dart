@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
+
+import 'constants.dart';
 import 'presentacion/pantallas/login_screen.dart';
 import 'presentacion/pantallas/register_type.dart';
 import 'presentacion/pantallas/home_screen.dart';
-import 'constants.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'presentacion/pantallas/splash_screen.dart';
+
+// --- IMPORTANTE: Importamos el servicio de notificaciones ---
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // --- INICIALIZAMOS LAS NOTIFICACIONES AQUÍ ---
+  await NotificationService.init();
+  // ---------------------------------------------
+
   runApp(const MyApp());
 }
 
@@ -23,14 +32,12 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Dental Lanch',
       theme: ThemeData(primarySwatch: Colors.pink),
-      // CAMBIO: Ahora iniciamos en el Splash
       home: const SplashScreen(),
     );
   }
 }
 
 // Este widget es el que decide a dónde ir después del Splash
-// Lo usaremos en la navegación desde splash_screen.dart
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 

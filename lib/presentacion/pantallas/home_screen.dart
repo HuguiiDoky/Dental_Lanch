@@ -1,10 +1,12 @@
+// ignore_for_file: empty_catches, deprecated_member_use, avoid_print
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../constants.dart';
+import '../../services/database_service.dart';
 import 'profile_screen.dart';
 import 'ac_pasouno.dart';
 import 'citas.dart';
-import '../../services/database_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'notifications_screen.dart';
 
 const int kHomePageIndex = 0;
 const int kCalendarPageIndex = 1;
@@ -33,6 +35,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _currentPageIndex = widget.initialIndex;
+
+    // --- LÓGICA AUTOMÁTICA ---
+    // Esto revisará en segundo plano si hay citas próximas
+    _firestoreService.checkExpiredAppointments();
+    _firestoreService.checkUpcomingReminders();
+    // -------------------------
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_pageController.hasClients) {
         _pageController.jumpToPage(_currentPageIndex);
@@ -53,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _onItemTapped(kProfilePageIndex);
   }
 
-  // --- HELPER: Parseo Inteligente ---
   DateTime? _parseSmartDate(Map<String, dynamic> data) {
     var rawDate = data['fechaISO'] ?? data['fecha'];
     if (rawDate == null) return null;
@@ -133,7 +141,6 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         return parsedDate;
       }
-      // ignore: empty_catches
     } catch (e) {}
 
     try {
@@ -152,7 +159,6 @@ class _HomeScreenState extends State<HomeScreen> {
         Map<String, dynamic>? nextAppointment;
 
         if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          // 1. Convertir documentos a Objetos
           var rawList = snapshot.data!.docs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
 
@@ -179,12 +185,10 @@ class _HomeScreenState extends State<HomeScreen> {
             };
           }).toList();
 
-          // 2. Filtrar fechas válidas
           var validList = rawList
               .where((app) => app['realDate'] != null)
               .toList();
 
-          // 3. Ordenar cronológicamente
           validList.sort((a, b) {
             return (a['realDate'] as DateTime).compareTo(
               b['realDate'] as DateTime,
@@ -193,23 +197,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
           allAppointments = validList;
 
-          // 4. Encontrar la "Próxima Cita"
           final now = DateTime.now();
           final threshold = now.subtract(const Duration(hours: 1));
 
           try {
-            // Buscamos la primera cita futura y activa
             nextAppointment = validList.firstWhere((app) {
               final bool isFuture = (app['realDate'] as DateTime).isAfter(
                 threshold,
               );
-
-              // --- CORRECCIÓN AQUÍ: Usamos .toString() para asegurar el tipo ---
               final String status = (app['status'] ?? '').toString();
-
               final bool isActive =
                   status != 'cancelada' && status != 'expirada';
-
               return isFuture && isActive;
             });
           } catch (e) {
@@ -220,12 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final List<Widget> widgetOptions = <Widget>[
           _HomeScreenContent(appointment: nextAppointment),
           AppointmentsScreen(appointments: allAppointments),
-          const Center(
-            child: Text(
-              'Notificaciones',
-              style: TextStyle(fontSize: 24, color: kLogoGrayColor),
-            ),
-          ),
+          const NotificationsScreen(),
           const ProfileScreen(),
         ];
 
@@ -286,7 +279,6 @@ class _HomeScreenContent extends StatefulWidget {
 
 class __HomeScreenContentState extends State<_HomeScreenContent> {
   int? _selectedCardIndex;
-  bool _isNotificationActive = false;
   final FirestoreService _firestoreService = FirestoreService();
 
   @override
@@ -418,11 +410,9 @@ class __HomeScreenContentState extends State<_HomeScreenContent> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        // ignore: deprecated_member_use
         border: Border.all(color: kBorderGrayColor.withOpacity(0.5)),
         boxShadow: [
           BoxShadow(
-            // ignore: deprecated_member_use
             color: Colors.grey.withOpacity(0.1),
             spreadRadius: 2,
             blurRadius: 10,
@@ -445,15 +435,15 @@ class __HomeScreenContentState extends State<_HomeScreenContent> {
                 ),
               ),
               IconButton(
-                icon: Icon(
-                  _isNotificationActive
-                      ? Icons.notifications
-                      : Icons.notifications_none_outlined,
-                  color: _isNotificationActive ? kPrimaryColor : kLogoGrayColor,
+                icon: const Icon(
+                  Icons.notifications_none_outlined,
+                  color: kLogoGrayColor,
                 ),
-                onPressed: () => setState(
-                  () => _isNotificationActive = !_isNotificationActive,
-                ),
+                onPressed: () {
+                  context
+                      .findAncestorStateOfType<_HomeScreenState>()
+                      ?._onItemTapped(kNotificationsPageIndex);
+                },
               ),
             ],
           ),
